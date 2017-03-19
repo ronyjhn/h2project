@@ -2,26 +2,45 @@ package com.eu;
 
 import com.google.common.base.Stopwatch;
 
-import javax.management.Query;
 import java.sql.*;
+import java.util.Date;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Created by ronyjohn on 18/03/17.
  */
-public class Main1 {
-    public static void main(final String[] args) throws Exception {
-        System.out.println("Hello World");
-        final Connection con = getDBConnection();
-        creteTable(con);
-        insertIntoTable(con);
-        selectCount(con);
-        final Random random = new Random();
-        for (int i = 0; i < 10; i++) {
-            selectQuery(con, random.nextInt(10000 - 100) + 100);
+public class H2Test {
+    private static final int RANDOM_NUMBER_FROM = 100;
+    private static final int RANDOM_NUMBER_TO = 100000;
+    private static final int TOTAL_ROWS = 300000;
+    private static final long WARM_UP_DURATION_IN_MINS = 1;
+
+    public static void main(final String[] args) throws SQLException {
+        try (final Connection con = getDBConnection();) {
+            creteTable(con);
+            insertIntoTable(con);
+            selectCount(con);
+            selectFirstPerson(con);
+            final Random random = new Random();
+            final long start = System.currentTimeMillis();
+            final long endAt = TimeUnit.MINUTES.toMillis(WARM_UP_DURATION_IN_MINS) + start;
+            System.out.println("Warmup started at " + new Date(start) + ", will end at " + new Date(endAt));
+            while (true) {
+                selectQuery(con, random.nextInt(RANDOM_NUMBER_TO - RANDOM_NUMBER_FROM) + RANDOM_NUMBER_FROM, false);
+                if (endAt <= System.currentTimeMillis()) {
+                    System.out.println("Warmup completed");
+                    break;
+
+                }
+            }
+
+
+            for (int i = 0; i < 10; i++) {
+                selectQuery(con, random.nextInt(RANDOM_NUMBER_TO - RANDOM_NUMBER_FROM) + RANDOM_NUMBER_FROM, true);
+            }
+
         }
-        selectFirstPerson(con);
-        System.out.println(con);
 
     }
 
@@ -35,8 +54,9 @@ public class Main1 {
         }
     }
 
-    public static void selectQuery(final Connection con, final int id) {
+    public static void selectQuery(final Connection con, final int id, final boolean logIt) {
         final Stopwatch stopwatch = Stopwatch.createStarted();
+        int actualId = 0;
         try (final PreparedStatement pstmt = con.prepareStatement("Select ID from PERSON where name=?");) {
 
             pstmt.setString(1, "name" + id);
@@ -45,7 +65,7 @@ public class Main1 {
 
 
                 if (res.next()) {
-                    System.out.println("Selected person ID is " + res.getInt(1));
+                    actualId = res.getInt(1);
                 }
             }
 
@@ -53,7 +73,9 @@ public class Main1 {
             sqe.printStackTrace();
         }
         stopwatch.stop();
-        System.out.println("Time taken by select query is " + stopwatch);
+        if (logIt) {
+            System.out.println("Time taken by select query is " + stopwatch + " with id as " + id);
+        }
     }
 
 
@@ -74,7 +96,7 @@ public class Main1 {
         con.setAutoCommit(false);
         try (final PreparedStatement pstmt = con.prepareStatement(insertSQL);) {
 
-            for (int i = 0; i < 30000; i++) {
+            for (int i = 0; i < TOTAL_ROWS; i++) {
                 pstmt.setInt(1, i);
                 pstmt.setString(2, "name" + i);
                 pstmt.setString(3, "address" + i);
@@ -101,19 +123,18 @@ public class Main1 {
     }
 
     private static Connection getDBConnection() throws SQLException {
-        Connection dbConnection = null;
         try {
             Class.forName("org.h2.Driver");
         } catch (ClassNotFoundException e) {
-            System.out.println(e.getMessage());
+            e.printStackTrace();
         }
         try {
-            dbConnection = DriverManager.getConnection("jdbc:h2:mem:test;DB_CLOSE_DELAY=-1", "",
+            return DriverManager.getConnection("jdbc:h2:mem:test;DB_CLOSE_DELAY=-1", "",
                     "");
-            return dbConnection;
+
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            e.printStackTrace();
         }
-        return dbConnection;
+        return null;
     }
 }
