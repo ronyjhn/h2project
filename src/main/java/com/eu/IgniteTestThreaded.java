@@ -1,5 +1,6 @@
 package com.eu;
 
+import com.eu.models.Person;
 import com.google.common.base.Stopwatch;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
